@@ -1,14 +1,22 @@
 {
+	"scripts": {
+		"ingest": "ts-node workers/ingest.ts"
+	},
 	"dependencies": {
-		"@supabase/supabase-js": "^2.49.4",
-		"@opensearch-project/opensearch": "^3.5.1",
 		"@nestjs/cqrs": "^11.0.3",
-		"reflect-metadata": "^0.2.2",
+		"@opensearch-project/opensearch": "^3.5.1",
+		"@supabase/supabase-js": "^2.49.4",
+		"openai": "^4.95.1",
+		"pdf-parse": "^1.1.1",
 		"prisma": "^6.6.0",
-		"typescript": "^5.8.3",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
-		"vite": "^6.3.2",
-		"tailwindcss": "^4.1.4"
+		"reflect-metadata": "^0.2.2",
+		"tailwindcss": "^4.1.4",
+		"typescript": "^5.8.3",
+		"vite": "^6.3.2"
+	},
+	"devDependencies": {
+		"ts-node": "^10.9.2"
 	}
 }
