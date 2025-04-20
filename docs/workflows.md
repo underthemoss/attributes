@@ -1,8 +1,10 @@
 # Workflows
 
 1. **UploadDocumentCommand**  
-   - Persist file in Supabase Storage  
-   - Emit DocumentUploaded event
+   - Upload file to Supabase Storage (`documents` bucket) via UI
+   - POST to `/api/upload` with `{ path }`
+   - Backend inserts row in `documents` table with `status='pending'` and storage path
+   - Emit `DocumentUploaded` event with document ID
 
 2. **Document Ingestion Worker**  
    - On DocumentUploaded  
