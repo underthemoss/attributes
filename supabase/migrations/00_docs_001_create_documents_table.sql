@@ -1,6 +1,6 @@
 create table documents (
   id             uuid      primary key default gen_random_uuid(),
-  path           text      not null,
+  storage_path   text      not null,
   status         text      not null default 'pending',
   uploaded_at    timestamptz default now(),
   processed_at   timestamptz,

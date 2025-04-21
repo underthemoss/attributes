@@ -11,12 +11,18 @@ export class UploadDocumentCommandHandler implements ICommandHandler<UploadDocum
   constructor(private readonly eventBus: EventBus) {}
 
   async execute(command: UploadDocumentCommand) {
+    const log = (...args: any[]) => console.log(new Date().toISOString(), '[UploadHandler]', ...args);
+    log('Upload started', { storage_path: command.storage_path });
     // Insert into documents table
     const { data, error } = await supabase.from('documents').insert({
-      storage_path: command.path,
+      storage_path: command.storage_path,
       status: 'pending',
     }).select().single();
-    if (error) throw error;
+    if (error) {
+      log('DB insert error', error);
+      throw error;
+    }
+    log('DB insert success', data);
     // Emit DocumentUploaded event
     this.eventBus.publish({
       type: 'DocumentUploaded',

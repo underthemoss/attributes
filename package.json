@@ -1,11 +1,18 @@
 {
 	"scripts": {
-		"ingest": "ts-node workers/ingest.ts"
+		"ingest": "ts-node workers/ingest.ts",
+		"start:backend": "ts-node src/main.ts"
 	},
 	"dependencies": {
+		"@nestjs/common": "^11.0.20",
+		"@nestjs/core": "^11.0.20",
 		"@nestjs/cqrs": "^11.0.3",
+		"@nestjs/platform-express": "^11.0.20",
 		"@opensearch-project/opensearch": "^3.5.1",
 		"@supabase/supabase-js": "^2.49.4",
+		"@types/node-fetch": "2",
+		"dotenv": "^16.5.0",
+		"node-fetch": "2",
 		"openai": "^4.95.1",
 		"pdf-parse": "^1.1.1",
 		"prisma": "^6.6.0",

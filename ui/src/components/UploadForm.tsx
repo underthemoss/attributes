@@ -6,61 +6,87 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export const UploadForm: React.FC = () => {
+export const UploadForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFile(e.target.files?.[0] || null);
+    const selected = e.target.files?.[0] || null;
+    setFile(selected);
     setError(null);
     setSuccess(null);
+    console.log('[UploadForm] File selected:', selected);
   };
 
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a file.');
+      console.error('[UploadForm] No file selected');
       return;
     }
     setLoading(true);
     setError(null);
     setSuccess(null);
+    console.log('[UploadForm] Upload started');
+    console.log('[UploadForm] File:', file);
+    console.log('[UploadForm] Supabase config:', { supabaseUrl, supabaseKey: supabaseKey ? '***' : '(empty)' });
     try {
+      console.log('[UploadForm] Calling supabase.storage.from("documents").upload with:', file.name);
       const { data, error: uploadError } = await supabase.storage.from('documents').upload(file.name, file);
-      if (uploadError || !data) throw uploadError || new Error('Upload failed');
+      console.log('[UploadForm] Supabase upload result:', { data, uploadError });
+      if (uploadError || !data) {
+        console.error('[UploadForm] Upload error:', uploadError);
+        throw uploadError || new Error('Upload failed');
+      }
+      console.log('[UploadForm] Notifying backend at /api/upload with:', data.path);
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: data.path }),
+        body: JSON.stringify({ storage_path: data.path }),
       });
+      console.log('[UploadForm] Backend response:', res.status, res.statusText);
       if (!res.ok) throw new Error('Failed to notify backend');
       setSuccess('File uploaded and backend notified!');
+      setFile(null);
+      if (onSuccess) onSuccess();
     } catch (err: any) {
       setError(err.message || 'An error occurred');
+      console.error('[UploadForm] Caught error:', err);
     } finally {
       setLoading(false);
+      console.log('[UploadForm] Upload finished');
     }
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded shadow">
-      <label className="block mb-2 font-bold">Upload a document:</label>
+    <div className="bg-white p-6 rounded-lg border border-border shadow-sm max-w-lg flex flex-col gap-4">
+      <label className="block font-medium text-text mb-1">Upload a document</label>
       <input
         type="file"
-        className="mb-4"
+        className="block w-full text-subtext file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-text disabled:opacity-50"
         onChange={handleFileChange}
         disabled={loading}
       />
       <button
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        className="mt-2 px-5 py-2 bg-accent text-white rounded-md font-semibold shadow-sm hover:bg-opacity-90 transition disabled:opacity-60"
         onClick={handleUpload}
         disabled={loading || !file}
       >
         {loading ? 'Uploading...' : 'Upload & Parse'}
       </button>
-      {error && <div className="mt-2 text-red-600">{error}</div>}
-      {success && <div className="mt-2 text-green-600">{success}</div>}
+      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {/* For debugging: show supabaseUrl and file info if error */}
+      {error && (
+        <div className="text-xs text-gray-400 break-all mt-1">
+          <div><b>Supabase URL:</b> {supabaseUrl}</div>
+          <div><b>File Name:</b> {file?.name}</div>
+          <div><b>File Type:</b> {file?.type}</div>
+          <div><b>File Size:</b> {file?.size}</div>
+        </div>
+      )}
+      {success && <div className="text-green-600 text-sm">{success}</div>}
     </div>
   );
 };

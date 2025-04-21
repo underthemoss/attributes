@@ -1,3 +1,3 @@
 export class UploadDocumentCommand {
-  constructor(public readonly path: string) {}
+  constructor(public readonly storage_path: string) {}
 }

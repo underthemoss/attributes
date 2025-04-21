@@ -7,7 +7,7 @@ export class UploadController {
   constructor(private readonly commandBus: CommandBus) {}
 
   @Post('upload')
-  async upload(@Body() body: { path: string }) {
-    return this.commandBus.execute(new UploadDocumentCommand(body.path));
+  async upload(@Body() body: { storage_path: string }) {
+    return this.commandBus.execute(new UploadDocumentCommand(body.storage_path));
   }
 }

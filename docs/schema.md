@@ -17,17 +17,26 @@ Key tables:
 
 The `documents` table tracks all uploaded documents and their ingestion status. It is the entry point for the document processing pipeline.
 
-**Schema:**
+**Actual Schema (Live Database):**
 ```sql
 create table documents (
-  id             uuid      primary key default gen_random_uuid(),
-  path           text      not null, -- Supabase Storage path
-  status         text      not null default 'pending',
+  id             uuid primary key default gen_random_uuid(),
+  storage_path   text not null, -- Supabase Storage path
+  status         text default 'pending',
   uploaded_at    timestamptz default now(),
   processed_at   timestamptz,
   error_message  text
 );
 ```
+
+| Column         | Type                     | Nullable | Default           | Description                      |
+|---------------|--------------------------|----------|-------------------|----------------------------------|
+| id            | uuid                     | NO       | gen_random_uuid() | Unique document identifier       |
+| storage_path  | text                     | NO       |                   | Path in Supabase Storage bucket  |
+| status        | text                     | YES      | 'pending'         | Ingestion status                 |
+| uploaded_at   | timestamptz with time zone| YES     | now()             | Upload timestamp                 |
+| processed_at  | timestamptz with time zone| YES     |                   | When ingestion completed         |
+| error_message | text                     | YES      |                   | Error details if failed          |
 
 **Status transitions:**
 - `pending` → Document has been uploaded and is awaiting processing
@@ -40,7 +49,7 @@ create table documents (
 - `uploaded_at` (for time-based queries)
 
 **Storage:**
-- Files are stored in the Supabase Storage bucket `documents`, with the `path` column referencing the storage object path.
+- Files are stored in the Supabase Storage bucket `documents`, with the `storage_path` column referencing the storage object path.
 
 **Pipeline:**
 - New uploads are inserted with `status = 'pending'`
