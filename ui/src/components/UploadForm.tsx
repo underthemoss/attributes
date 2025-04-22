@@ -1,10 +1,6 @@
 /// <reference types="vite/client" />
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '../shared/supabaseClient';
 
 export const UploadForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -31,7 +27,7 @@ export const UploadForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) 
     setSuccess(null);
     console.log('[UploadForm] Upload started');
     console.log('[UploadForm] File:', file);
-    console.log('[UploadForm] Supabase config:', { supabaseUrl, supabaseKey: supabaseKey ? '***' : '(empty)' });
+  
     try {
       console.log('[UploadForm] Calling supabase.storage.from("documents").upload with:', file.name);
       const { data, error: uploadError } = await supabase.storage.from('documents').upload(file.name, file);
@@ -74,13 +70,12 @@ export const UploadForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) 
         onClick={handleUpload}
         disabled={loading || !file}
       >
-        {loading ? 'Uploading...' : 'Upload & Parse'}
+        {loading ? 'Uploading...' : 'Upload'}
       </button>
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {/* For debugging: show supabaseUrl and file info if error */}
       {error && (
         <div className="text-xs text-gray-400 break-all mt-1">
-          <div><b>Supabase URL:</b> {supabaseUrl}</div>
           <div><b>File Name:</b> {file?.name}</div>
           <div><b>File Type:</b> {file?.type}</div>
           <div><b>File Size:</b> {file?.size}</div>

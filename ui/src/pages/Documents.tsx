@@ -1,73 +1,107 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../shared/supabaseClient';
 import { UploadForm } from '../components/UploadForm';
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!
-);
-
 export default function Documents() {
-  const [docs, setDocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parsingIdx, setParsingIdx] = useState<number | null>(null);
-  const [parseResults, setParseResults] = useState<{ [idx: number]: string }>({});
-  const [parseErrors, setParseErrors] = useState<{ [idx: number]: string }>({});
+  const [genId, setGenId] = useState<string | null>(null);
 
-  const handleParse = async (doc: any, idx: number) => {
-    setParsingIdx(idx);
-    setParseResults(r => ({ ...r, [idx]: '' }));
-    setParseErrors(e => ({ ...e, [idx]: '' }));
-    try {
-      const parseUrl = import.meta.env.VITE_BACKEND_API_PARSE_URL;
-      if (!parseUrl) throw new Error('VITE_BACKEND_API_PARSE_URL is not set in .env');
-      const res = await fetch(parseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bucket: 'documents', name: doc.name }),
-      });
-      if (!res.ok) throw new Error('Failed to parse document');
-      const data = await res.json();
-      console.log('Parse API response:', data);
-      setParseResults(r => ({ ...r, [idx]: data.result || JSON.stringify(data) }));
-    } catch (err: any) {
-      console.error('Parse API error:', err);
-      setParseErrors(e => ({ ...e, [idx]: err.message || 'Parse error' }));
-    } finally {
-      setParsingIdx(null);
-    }
+  const statusColorMap: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    extracted: 'bg-blue-100 text-blue-800',
+    generating: 'bg-purple-100 text-purple-800',
+    completed: 'bg-green-100 text-green-800',
+    error: 'bg-red-100 text-red-800',
   };
 
-
-  // Fetch all files in the 'documents' bucket via Supabase Storage API
-  const fetchDocs = async () => {
+  const fetchDocuments = async () => {
+    console.log('[fetchDocuments] Starting document fetch process (storage + table merge)');
     setLoading(true);
     setError(null);
     try {
-      // Use Supabase Storage list API
-      const { data, error } = await supabase.storage.from('documents').list('', { limit: 100 });
-      if (error) throw error;
-      setDocs(data || []);
+      // Fetch files from storage
+      console.log('[fetchDocuments] Fetching files from Supabase storage...');
+      const { data: files, error: listError } = await supabase.storage.from('documents').list('', { limit: 1000 });
+      if (listError) {
+        console.error('[fetchDocuments] Error fetching from storage:', listError);
+        setError(listError.message);
+        setLoading(false);
+        return;
+      }
+      console.log('[fetchDocuments] Storage fetch result:', files);
+
+      // Fetch parsed_attributes table rows
+      console.log('[fetchDocuments] Fetching parsed_attributes rows...');
+      const { data: parsedRows, error: parsedError } = await supabase
+        .from('parsed_attributes')
+        .select('id, file_name, parsed_at');
+      if (parsedError) {
+        console.error('[fetchDocuments] Error fetching from parsed_attributes:', parsedError);
+        setError(parsedError.message);
+        setLoading(false);
+        return;
+      }
+      console.log('[fetchDocuments] parsed_attributes fetch result:', parsedRows);
+
+      // Merge: For each file, check if it has a parsed_attributes row (by file_name)
+      const enriched = (files || []).map(file => {
+        // Find all matching parsed rows for this file
+        const matchingRows = (parsedRows || []).filter(row => row.file_name === file.name);
+        // Sort by parsed_at (desc)
+        matchingRows.sort((a, b) => {
+          const aTime = a.parsed_at ? new Date(a.parsed_at).getTime() : 0;
+          const bTime = b.parsed_at ? new Date(b.parsed_at).getTime() : 0;
+          return bTime - aTime;
+        });
+        const parsedRow = matchingRows[0] || null;
+        if (parsedRow) {
+          console.log(`[fetchDocuments] For file ${file.name}, using parsedRow:`, parsedRow);
+        }
+        return {
+          ...file,
+          isParsed: !!parsedRow,
+          lastParsedAt: parsedRow ? parsedRow.parsed_at : null,
+        };
+      });
+      console.log('[fetchDocuments] Enriched merged documents:', enriched);
+      setDocuments(enriched);
     } catch (err: any) {
-      setError(err.message || 'Error fetching files');
+      console.error('[fetchDocuments] Caught error:', err);
+      setError(err.message || 'Error fetching documents');
     } finally {
       setLoading(false);
+      console.log('[fetchDocuments] Done.');
     }
   };
 
-  useEffect(() => { fetchDocs(); }, []);
+
+
+  const parseDocument = async (docId: string) => {
+    await fetch(`/api/parse/${docId}`, { method: 'POST' });
+    await fetchDocuments();
+  };
+
+  const generateProducts = async (docId: string) => {
+    setGenId(docId);
+    await fetch(`/api/generate/${docId}`, { method: 'POST' });
+    setGenId(null);
+    await fetchDocuments();
+  };
+
+  useEffect(() => { fetchDocuments(); }, []);
 
   return (
     <div className="font-sans">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-text">Documents</h2>
-        <button className="px-4 py-2 bg-accent text-white rounded-md font-medium shadow-sm hover:bg-opacity-90 transition" onClick={fetchDocs} disabled={loading}>
+        <button className="px-4 py-2 bg-accent text-white rounded-md font-medium shadow-sm hover:bg-opacity-90 transition" onClick={fetchDocuments} disabled={loading}>
           Refresh
         </button>
       </div>
       <div className="mb-8">
-        <UploadForm onSuccess={fetchDocs} />
+        <UploadForm onSuccess={fetchDocuments} />
       </div>
       {loading ? (
         <div className="animate-pulse text-subtext">Loading...</div>
@@ -81,33 +115,50 @@ export default function Documents() {
                 <th className="py-3 px-4 text-left font-medium text-subtext">File Name</th>
                 <th className="py-3 px-4 text-left font-medium text-subtext">Size (bytes)</th>
                 <th className="py-3 px-4 text-left font-medium text-subtext">Last Modified</th>
+                <th className="py-3 px-4 text-left font-medium text-subtext">Status</th>
                 <th className="py-3 px-4 text-left font-medium text-subtext">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {docs.map((doc: any, idx: number) => (
-                <tr key={doc.id || doc.name} className="border-b border-border last:border-0 hover:bg-gray-50 transition">
-                  <td className="py-2 px-4 font-mono text-xs text-text">{doc.name}</td>
-                  <td className="py-2 px-4 text-text">{doc.metadata?.size ?? '-'}</td>
-                  <td className="py-2 px-4 text-text">{doc.metadata?.lastModified ? new Date(doc.metadata.lastModified).toLocaleString() : '-'}</td>
-                  <td className="py-2 px-4 text-text">
-                    <button
-                      className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                      disabled={parsingIdx === idx}
-                      onClick={() => handleParse(doc, idx)}
-                    >
-                      {parsingIdx === idx ? 'Parsing...' : 'Parse'}
-                    </button>
-                    {parseErrors[idx] ? (
-                      <span className="text-red-700 text-xs">Error: {parseErrors[idx]}</span>
-                    ) : parseResults[idx] === '' ? (
-                      <span className="text-yellow-700 text-xs">No result returned.</span>
-                    ) : parseResults[idx] && (
-                      <span className="text-green-700 text-xs">{JSON.stringify(parseResults[idx])}</span>
-                    )}
+              {documents.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center text-gray-400 py-8">
+                    No documents found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                documents.map((file: any) => {
+                  const isParsed = !!file.isParsed;
+                  return (
+                    <tr key={file.id || file.name} className="border-b border-border last:border-0 hover:bg-gray-50 transition">
+                      <td className="py-2 px-4 font-mono text-xs text-text">{file.name}</td>
+                      <td className="py-2 px-4 text-text">{file.size ?? '-'}</td>
+                      <td className="py-2 px-4 text-text">{file.updated_at ? new Date(file.updated_at).toLocaleString() : '-'}</td>
+                      <td className="py-2 px-4 text-text">
+                        {isParsed ? (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">Parsed</span>
+                        ) : (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">Not Parsed</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-4 text-text">
+                        {/* Actions: show Parse button if not parsed */}
+                        {!isParsed && (
+                          <button
+                            className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                            onClick={async () => {
+                              console.log('[Documents] Parse button clicked for file:', file.name);
+                              await parseDocument(file.name);
+                            }}
+                          >
+                            Parse
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

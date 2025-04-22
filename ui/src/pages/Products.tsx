@@ -1,10 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!
-);
+import { supabase } from '../shared/supabaseClient';
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
@@ -14,17 +9,17 @@ export default function Products() {
   const [modal, setModal] = useState<any | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    supabase
-      .from('products')
-      .select('id, name, model, manufacturer, product_metadata(*), product_attribute_values(*)')
-      .then(({ data, error }) => {
-        if (error) setError(error.message);
-        setProducts(data || []);
-        setLoading(false);
-      });
-  }, []);
+  setLoading(true);
+  setError(null);
+  supabase
+    .from('products')
+    .select('id, name, attributes_json, product_metadata')
+    .then(({ data, error }) => {
+      if (error) setError(error.message);
+      setProducts(data || []);
+      setLoading(false);
+    });
+}, []);
 
   const filtered = products.filter(p =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -72,24 +67,39 @@ export default function Products() {
         </table>
       )}
       {modal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative">
-            <button className="absolute top-2 right-2 text-xl" onClick={() => setModal(null)}>&times;</button>
-            <h3 className="text-lg font-bold mb-2">{modal.name}</h3>
-            <div className="mb-2 text-gray-500">Model: {modal.model} | Manufacturer: {modal.manufacturer}</div>
-            <div className="mb-2 font-semibold">Metadata:</div>
-            <pre className="bg-gray-100 rounded p-2 text-xs mb-2 overflow-x-auto">{JSON.stringify(modal.product_metadata, null, 2)}</pre>
-            <div className="mb-2 font-semibold">Attributes:</div>
-            <ul>
-              {(modal.product_attribute_values || []).map((attr: any) => (
-                <li key={attr.id} className="mb-1">
-                  <span className="font-mono text-xs text-gray-500">{attr.attribute_internal_name}</span>: <span>{attr.value}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
+  <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative">
+      <button className="absolute top-2 right-2 text-xl" onClick={() => setModal(null)}>&times;</button>
+      <h3 className="text-lg font-bold mb-2">{modal.name}</h3>
+      <div className="mb-2 text-gray-500">
+        {modal.product_metadata?.manufacturer || modal.product_metadata?.model
+          ? <>Manufacturer: {modal.product_metadata?.manufacturer || '-'} | Model: {modal.product_metadata?.model || '-'}</>
+          : <span>No metadata</span>}
+      </div>
+      <div className="mb-2 font-semibold">Specs:</div>
+      <table className="w-full text-xs bg-gray-50 rounded mb-2">
+        <thead>
+          <tr>
+            <th className="text-left p-1">Attribute</th>
+            <th className="text-left p-1">Value</th>
+            <th className="text-left p-1">Unit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {modal.attributes_json && Object.entries(modal.attributes_json).map(([key, val]: [string, any]) => (
+            <tr key={key}>
+              <td className="font-mono text-gray-600 p-1">{key}</td>
+              <td className="p-1">{typeof val === 'object' ? val.value : val}</td>
+              <td className="p-1">{typeof val === 'object' && val.unit ? val.unit : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mb-2 font-semibold">Metadata:</div>
+      <pre className="bg-gray-100 rounded p-2 text-xs mb-2 overflow-x-auto">{JSON.stringify(modal.product_metadata, null, 2)}</pre>
+    </div>
+  </div>
+)}
     </div>
   );
 }

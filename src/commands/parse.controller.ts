@@ -47,12 +47,13 @@ export class ParseController {
       return { error: 'Failed to read file', details: err };
     }
     log('File text extracted', fileText.slice(0, 200));
-    // 3. Send to OpenAI GPT-4 API
+    // 3. Send to OpenAI GPT-4o-mini API with function-calling
     let gptResult = '';
+    let rawAttributes = [];
     try {
-      const systemPrompt = 'You are an expert document parser. Extract all structured attributes from the following document.';
+      const systemPrompt = 'Extract all attribute name/value pairs from this spec sheet. Return JSON: { attributes: [{ internal_name, value }] }.';
       const userPrompt = fileText.slice(0, 8000);
-      log('Prompt sent to GPT:', { system: systemPrompt, user: userPrompt.slice(0, 200) });
+      log('Prompt sent to GPT (function-calling):', { system: systemPrompt, user: userPrompt.slice(0, 200) });
       const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -60,24 +61,62 @@ export class ParseController {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4-turbo',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
+          functions: [{
+            name: 'recordAttributes',
+            description: 'Record raw attributes for a document',
+            parameters: {
+              type: 'object',
+              properties: {
+                attributes: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      internal_name: { type: 'string' },
+                      value: { type: 'string' }
+                    },
+                    required: ['internal_name', 'value']
+                  }
+                }
+              },
+              required: ['attributes']
+            }
+          }],
+          function_call: { name: 'recordAttributes' }
         }),
       });
       log('Successfully connected to GPT API.');
       const gptData = await gptRes.json();
-      log('Full GPT-4 API response:', JSON.stringify(gptData, null, 2));
-      gptResult = gptData.choices?.[0]?.message?.content || '';
-      log('GPT-4 API response received:', gptResult.slice(0, 200));
+      log('Full GPT-4o-mini API response:', JSON.stringify(gptData, null, 2));
+      const functionCall = gptData.choices?.[0]?.message?.function_call;
+      if (!functionCall || !functionCall.arguments) {
+        log('No function_call response from OpenAI.');
+        return { error: 'No function_call response from OpenAI' };
+      }
+      const args = JSON.parse(functionCall.arguments);
+      rawAttributes = args.attributes || [];
+      log('Extracted raw attributes:', rawAttributes);
+      gptResult = JSON.stringify(rawAttributes);
     } catch (err) {
       log('OpenAI API error', err);
-      return { error: 'Failed to parse with GPT-4', details: err };
+      return { error: 'Failed to parse with GPT-4o-mini', details: err };
     }
-    // 4. Store result in Supabase (e.g., parsed_attributes table)
+    // 4. Store results in raw_attributes and optionally parsed_attributes
     try {
+      for (const { internal_name, value } of rawAttributes) {
+        await supabase.from('raw_attributes').insert({
+          document_id: null, // TODO: set document_id if available, or add to body
+          attribute_internal_name: internal_name,
+          raw_value: value
+        });
+        log('Inserted raw attribute', { internal_name, value });
+      }
+      // Optionally, insert audit record
       const { error: insertError } = await supabase.from('parsed_attributes').insert({
         file_name: body.name,
         bucket: body.bucket,
@@ -92,7 +131,13 @@ export class ParseController {
       log('DB insert exception', err);
       return { error: 'Failed to save parsed result', details: err };
     }
-    // 5. Return result
+    // 5. Update document status and return result
+    try {
+      await supabase.from('documents').update({ status: 'extracted', processed_at: new Date().toISOString() }).eq('storage_path', body.name);
+      log('Updated document status to extracted');
+    } catch (err) {
+      log('Failed to update document status', err);
+    }
     const responseObj = { result: gptResult };
     log('Returning response to frontend:', JSON.stringify(responseObj));
     return responseObj;

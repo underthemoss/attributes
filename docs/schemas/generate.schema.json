@@ -1,0 +1,31 @@
+{
+  "type":"object",
+  "properties": {
+    "products": {
+      "type":"array",
+      "items": {
+        "type":"object",
+        "properties": {
+          "id":           {"type":"string","format":"uuid"},
+          "name":         {"type":"string"},
+          "model":        {"type":"string"},
+          "manufacturer": {"type":"string"},
+          "attributes": {
+            "type":"array",
+            "items": {
+              "type":"object",
+              "properties": {
+                "attribute_id": {"type":"string","format":"uuid"},
+                "value":        {"type":["number","string"]},
+                "unit":         {"type":"string"}
+              },
+              "required":["attribute_id","value"]
+            }
+          }
+        },
+        "required":["id","name","attributes"]
+      }
+    }
+  },
+  "required":["products"]
+}

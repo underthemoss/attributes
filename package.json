@@ -1,5 +1,6 @@
 {
 	"scripts": {
+		"assemble": "ts-node workers/assemble.ts",
 		"ingest": "ts-node workers/ingest.ts",
 		"start:backend": "ts-node src/main.ts"
 	},
@@ -24,6 +25,8 @@
 		"vite": "^6.3.2"
 	},
 	"devDependencies": {
+		"@types/react": "^19.1.2",
+		"@types/react-dom": "^19.1.2",
 		"ts-node": "^10.9.2"
 	}
 }
